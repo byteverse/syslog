@@ -1,4 +1,6 @@
+{-# language LambdaCase #-}
 {-# language NamedFieldPuns #-}
+{-# language TypeApplications #-}
 
 -- | Parse RFC 3164 messages. For example:
 --
@@ -41,7 +43,7 @@ data Message = Message
   { priority :: !Word32
   , timestamp :: !Timestamp
   , hostname :: {-# UNPACK #-} !Bytes
-  , process :: {-# UNPACK #-} !Process
+  , process :: !(Maybe Process)
   , message :: {-# UNPACK #-} !Bytes
   }
 
@@ -76,7 +78,11 @@ parser = do
   priority <- takePriority ()
   timestamp <- takeTimestamp ()
   hostname <- takeHostname ()
-  process <- takeProcess ()
+  process <- Latin.trySatisfy (==':') >>= \case
+    True -> pure Nothing
+    False -> do
+      p <- takeProcess ()
+      pure (Just p)
   Latin.skipChar ' '
   message <- Parser.remaining
   pure Message{priority,timestamp,hostname,process,message}
@@ -99,7 +105,9 @@ takeHostname e =
   Latin.takeTrailedBy e ' '
 
 -- | Consume the timestamp and the space that follows it. Returns
--- the parsed timestamp.
+-- the parsed timestamp. This allows two extensions to the RFC 3164
+-- datetime format. The year may be present either right after the
+-- day of the month or after the time of day.
 takeTimestamp :: e -> Parser e s Timestamp
 takeTimestamp e = do
   monthBytes <- Parser.take e 3
@@ -114,24 +122,41 @@ takeTimestamp e = do
     then pure (Chronos.DayOfMonth (fromIntegral dayRaw))
     else Parser.fail e
   Latin.char e ' '
-  hour <- Latin.decWord8 e
-  when (hour > 23) (Parser.fail e)
-  Latin.char e ':'
-  minute <- Latin.decWord8 e
-  when (minute > 59) (Parser.fail e)
-  Latin.char e ':'
-  second <- Latin.decWord8 e
-  when (second > 59) (Parser.fail e)
-  Latin.char e ' '
-  -- The only good way to allow a year is with backtracking. We do not
-  -- learn until we encounter the space following the decimal number
-  -- whether it was a year or part of a hostname (likely an ip address).
-  Parser.orElse
-    ( do y <- Latin.decWord32 e
-         Latin.char e ' '
-         pure Timestamp{month,day,hour,minute,second,year=Word32.just y}
-    )
-    (pure Timestamp{month,day,hour,minute,second,year=Word32.nothing})
+  hourOrYear <- Latin.decWord32 e
+  Latin.any e >>= \case
+    -- We interpret the number as a year if it is followed by
+    -- a space, and we interpret it as an hour if it is followed
+    -- by a colon.
+    ' ' -> do
+      hour <- Latin.decWord8 e
+      when (hour > 23) (Parser.fail e)
+      Latin.char e ':'
+      minute <- Latin.decWord8 e
+      when (minute > 59) (Parser.fail e)
+      Latin.char e ':'
+      second <- Latin.decWord8 e
+      when (second > 59) (Parser.fail e)
+      Latin.char e ' '
+      pure Timestamp{month,day,hour,minute,second,year=Word32.just hourOrYear}
+    ':' -> do
+      when (hourOrYear > 23) (Parser.fail e)
+      let hour = fromIntegral @Word32 @Word8 hourOrYear
+      minute <- Latin.decWord8 e
+      when (minute > 59) (Parser.fail e)
+      Latin.char e ':'
+      second <- Latin.decWord8 e
+      when (second > 59) (Parser.fail e)
+      Latin.char e ' '
+      -- The only good way to allow a year is with backtracking. We do not
+      -- learn until we encounter the space following the decimal number
+      -- whether it was a year or part of a hostname (likely an ip address).
+      Parser.orElse
+        ( do y <- Latin.decWord32 e
+             Latin.char e ' '
+             pure Timestamp{month,day,hour,minute,second,year=Word32.just y}
+        )
+        (pure Timestamp{month,day,hour,minute,second,year=Word32.nothing})
+    _ -> Parser.fail e
 
 -- | Take the process name and the process id and consume the colon
 -- that follows them. Does not consume any space after the colon.
