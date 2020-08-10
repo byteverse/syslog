@@ -22,7 +22,9 @@ main = do
           b1 <- b2b b0
           case Bsd.decode (Bytes.fromByteArray b1) of
             Nothing -> fail $ "Decode failure on line " ++ show ix
-            Just _ -> go (ix + 1)
+            Just r -> do
+              print r
+              go (ix + 1)
   go 0
 
 b2b :: ByteString -> IO ByteArray

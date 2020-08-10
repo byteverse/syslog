@@ -1,6 +1,9 @@
+{-# language BangPatterns #-}
+{-# language DuplicateRecordFields #-}
 {-# language LambdaCase #-}
 {-# language NamedFieldPuns #-}
 {-# language TypeApplications #-}
+{-# language UnboxedTuples #-}
 
 -- | Parse RFC 3164 messages. For example:
 --
@@ -9,7 +12,20 @@
 --
 -- This library assumes that the @TAG@ field described by section 5.3 of
 -- RFC 3164 is a process name. It also assumes that the optional bracketed
--- number that follows it is a process id.
+-- number that follows it is a process id. This library also addresses two
+-- common extensions to RFC 3164:
+--
+-- * Some vendors include a year after the timestamp. For example:
+--   @<14>Oct 15 11:14:59 2019 example.com ...@. When present, the year
+--   is parsed and provided to the user.
+-- * Some vendors include a priority that preceeds the process name. For
+--   example: @<133>Aug 10 09:05:14 my-host notice tmsh[4726]: ...@. The
+--   Linux man page for @syslog.conf@ lists these options for priority:
+--   @debug@, @info@, @notice@, @warning@, @warn@, @err@, @error@, @crit@,
+--   @alert@, @emerg@, @panic@. If a process name begins with any of these
+--   keywords (followed by a space), the keyword and the trailing space
+--   are removed from the process name, and the keyword is made available
+--   in the @priority@ field.
 module Syslog.Bsd
   ( -- * Types
     Message(..)
@@ -45,7 +61,7 @@ data Message = Message
   , hostname :: {-# UNPACK #-} !Bytes
   , process :: !(Maybe Process)
   , message :: {-# UNPACK #-} !Bytes
-  }
+  } deriving (Show)
 
 data Timestamp = Timestamp
   { month :: !Chronos.Month
@@ -58,12 +74,15 @@ data Timestamp = Timestamp
     -- a four-character year after the time of day. Since hostnames
     -- cannot start with digits, we can parse this unambiguously. We
     -- extend RFC 3164 to handle these nonstandard years.
-  }
+  } deriving (Show)
 
 data Process = Process
-  { name :: {-# UNPACK #-} !Bytes
+  { priority :: {-# UNPACK #-} !Bytes
+    -- ^ Priority is nonstandard. This field is the empty byte sequence
+    -- when the priority is not present.
+  , name :: {-# UNPACK #-} !Bytes
   , id :: {-# UNPACK #-} !Word32.Maybe
-  }
+  } deriving (Show)
 
 -- | Run the RFC 3164 parser. See 'parser'.
 decode :: Bytes -> Maybe Message
@@ -166,13 +185,27 @@ takeProcess e = do
   hasPid <- Parser.skipTrailedBy2 e 0x3A 0x5B
   processEndSucc <- Unsafe.cursor
   arr <- Unsafe.expose
-  let name = Bytes arr processStart ((processEndSucc - 1) - processStart)
+  let name0 = Bytes arr processStart ((processEndSucc - 1) - processStart)
+      !(# name, priority #) = case Bytes.split1 0x20 name0 of
+        Just (pre,post)
+          | Bytes.equalsLatin3 'e' 'r' 'r' pre -> (# post, pre #)
+          | Bytes.equalsLatin4 'c' 'r' 'i' 't' pre -> (# post, pre #)
+          | Bytes.equalsLatin4 'i' 'n' 'f' 'o' pre -> (# post, pre #)
+          | Bytes.equalsLatin4 'w' 'a' 'r' 'n' pre -> (# post, pre #)
+          | Bytes.equalsLatin5 'a' 'l' 'e' 'r' 't' pre -> (# post, pre #)
+          | Bytes.equalsLatin5 'd' 'e' 'b' 'u' 'g' pre -> (# post, pre #)
+          | Bytes.equalsLatin5 'e' 'm' 'e' 'r' 'g' pre -> (# post, pre #)
+          | Bytes.equalsLatin5 'e' 'r' 'r' 'o' 'r' pre -> (# post, pre #)
+          | Bytes.equalsLatin5 'p' 'a' 'n' 'i' 'c' pre -> (# post, pre #)
+          | Bytes.equalsLatin6 'n' 'o' 't' 'i' 'c' 'e' pre -> (# post, pre #)
+          | Bytes.equalsLatin7 'w' 'a' 'r' 'n' 'i' 'n' 'g' pre -> (# post, pre #)
+        _ -> (# name0, Bytes arr 0 0 #)
   case hasPid of
-    False -> pure Process{name,id=Word32.nothing}
+    False -> pure Process{priority,name,id=Word32.nothing}
     True -> do
       pid <- Latin.decWord32 e
       Latin.char2 e ']' ':'
-      pure Process{name,id=Word32.just pid}
+      pure Process{priority,name,id=Word32.just pid}
 
 -- Precondition: length of bytes is 3
 resolveMonth :: Bytes -> Chronos.Month

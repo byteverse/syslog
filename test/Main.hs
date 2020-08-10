@@ -45,13 +45,21 @@ main = do
       assert "priority" (priority == 26)
       assert "process_name" (isNothing process)
       assert "message" (message == Bytes.fromLatinString "ASA log")
+  case Bsd.decode msgE of
+    Nothing -> fail "Could not decode message E"
+    Just Message{process} -> case process of
+      Just Process{priority,name} -> do
+        assert "process_priority" (priority == Bytes.fromLatinString "notice")
+        assert "process_name" (name == Bytes.fromLatinString "tmsh")
+      Nothing -> fail "Message E missing process information"
   putStrLn "Finished"
 
 assert :: String -> Bool -> IO ()
 assert ctx b = if b then pure () else fail ctx
 
-msgA, msgB, msgC, msgD :: Bytes
+msgA, msgB, msgC, msgD, msgE :: Bytes
 msgA = Bytes.fromLatinString "<133>Feb 25 14:09:07 webserver syslogd: restart"
 msgB = Bytes.fromLatinString "<0>Oct 22 10:52:01 foo.example.org sched[0]: That's all"
 msgC = Bytes.fromLatinString "<133>May  2 11:43:37 2020 192.0.2.231 stm[8753]:  Hello"
 msgD = Bytes.fromLatinString "<26>May 05 2020 07:30:21 192.0.2.10 : ASA log"
+msgE = Bytes.fromLatinString "<133>Aug 10 07:12:13 example.local notice tmsh[4067]: hey"
