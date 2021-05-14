@@ -1,12 +1,16 @@
 {-# language DuplicateRecordFields #-}
 {-# language NamedFieldPuns #-}
 
+import Prelude hiding (id)
+
 import Data.Bytes (Bytes)
 import Data.Maybe (isNothing)
 import Syslog.Bsd (Message(Message),Process(Process))
 
 import qualified Data.Bytes as Bytes
+import qualified Data.Primitive as PM
 import qualified Syslog.Bsd as Bsd
+import qualified Syslog.Ietf as Ietf
 
 main :: IO ()
 main = do
@@ -45,6 +49,7 @@ main = do
       assert "priority" (priority == 26)
       assert "process_name" (isNothing process)
       assert "message" (message == Bytes.fromLatinString "ASA log")
+  putStrLn "Test E"
   case Bsd.decode msgE of
     Nothing -> fail "Could not decode message E"
     Just Message{process} -> case process of
@@ -52,6 +57,25 @@ main = do
         assert "process_priority" (priority == Bytes.fromLatinString "notice")
         assert "process_name" (name == Bytes.fromLatinString "tmsh")
       Nothing -> fail "Message E missing process information"
+  putStrLn "Test IETF A"
+  case Ietf.decode ietfA of
+    Nothing -> fail "Could not decode IETF message A"
+    Just Ietf.Message{version,hostname,structuredData} -> do
+      assert "version" (version == 1)
+      assert "hostname" (hostname == Bytes.fromLatinString "mymachine.example.com")
+      assert "structured_data_length" (length structuredData == 1)
+  putStrLn "Test IETF B"
+  case Ietf.decode ietfB of
+    Nothing -> fail "Could not decode IETF message B"
+    Just Ietf.Message{version,hostname,application,messageType,structuredData} -> do
+      assert "version" (version == 1)
+      assert "hostname" (hostname == Bytes.fromLatinString "FOOBAR-SRX-FWL0")
+      assert "application" (application == Bytes.fromLatinString "RT_FLOW")
+      assert "message_type" (messageType == Bytes.fromLatinString "RT_FLOW_SESSION_CLOSE")
+      assert "structured_data_length" (length structuredData == 1)
+      let Ietf.Element{id,parameters} = PM.indexSmallArray structuredData 0
+      assert "structured_data.id" (id == Bytes.fromLatinString "junos@2636.1.1.1.2.133")
+      assert "structured_data.parameters_length" (length parameters == 32)
   putStrLn "Finished"
 
 assert :: String -> Bool -> IO ()
@@ -63,3 +87,29 @@ msgB = Bytes.fromLatinString "<0>Oct 22 10:52:01 foo.example.org sched[0]: That'
 msgC = Bytes.fromLatinString "<133>May  2 11:43:37 2020 192.0.2.231 stm[8753]:  Hello"
 msgD = Bytes.fromLatinString "<26>May 05 2020 07:30:21 192.0.2.10 : ASA log"
 msgE = Bytes.fromLatinString "<133>Aug 10 07:12:13 example.local notice tmsh[4067]: hey"
+
+ietfA :: Bytes
+ietfA = Bytes.fromLatinString $ concat
+  [ "<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 "
+  , "[exampleSDID@32473 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"] "
+  , "BOMAn application event log entry"
+  ]
+
+ietfB :: Bytes
+ietfB = Bytes.fromLatinString $ concat
+  [ "<14>1 2020-10-15T17:01:23.466Z FOOBAR-SRX-FWL0 RT_FLOW - RT_FLOW_SESSION_CLOSE "
+  , "[junos@2636.1.1.1.2.133 reason=\"application failure or action\" "
+  , "source-address=\"192.0.2.29\" source-port=\"55110\" "
+  , "destination-address=\"192.0.2.30\" destination-port=\"135\" connection-tag=\"0\" "
+  , "service-name=\"junos-ms-rpc-tcp\" nat-source-address=\"192.0.2.229\" "
+  , "nat-source-port=\"55110\" nat-destination-address=\"192.0.2.230\" "
+  , "nat-destination-port=\"135\" nat-connection-tag=\"0\" src-nat-rule-type=\"N/A\" "
+  , "src-nat-rule-name=\"N/A\" dst-nat-rule-type=\"N/A\" dst-nat-rule-name=\"N/A\" "
+  , "protocol-id=\"6\" policy-name=\"EXAMPLE-POLICY\" "
+  , "source-zone-name=\"MYSRCZONE\" destination-zone-name=\"MYDSTZONE\" "
+  , "session-id-32=\"14953\" packets-from-client=\"0\" bytes-from-client=\"0\" "
+  , "packets-from-server=\"0\" bytes-from-server=\"0\" elapsed-time=\"1\" "
+  , "application=\"UNKNOWN\" nested-application=\"UNKNOWN\" username=\"N/A\" "
+  , "roles=\"N/A\" packet-incoming-interface=\"ge-0/0/5.0\" encrypted=\"UNKNOWN\"] "
+  , "session closed application failure or action"
+  ]
