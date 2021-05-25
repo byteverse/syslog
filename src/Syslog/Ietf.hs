@@ -23,7 +23,7 @@ module Syslog.Ietf
 import Prelude hiding (id)
 
 import Control.Monad (when)
-import Data.Bytes.Types (Bytes)
+import Data.Bytes.Types (Bytes(Bytes))
 import Data.Bytes.Parser (Parser)
 import Data.Word (Word8,Word32,Word64)
 import Data.Int (Int64)
@@ -34,6 +34,8 @@ import qualified Data.Primitive.Contiguous as C
 import qualified Data.Maybe.Unpacked.Numeric.Word32 as Word32
 import qualified Data.Bytes.Parser as Parser
 import qualified Data.Bytes.Parser.Latin as Latin
+import qualified Data.Bytes.Parser.Unsafe as Unsafe
+import qualified Data.Bytes.Types
 
 data Message = Message
   { priority :: !Word32
@@ -43,6 +45,8 @@ data Message = Message
   , application :: {-# UNPACK #-} !Bytes
   , processId :: {-# UNPACK #-} !Word32.Maybe
   , messageType :: {-# UNPACK #-} !Bytes
+    -- ^ A missing message type, represented as a hyphen in IETF-flavor
+    -- syslog, is represented by the empty byte sequence.
   , structuredData :: {-# UNPACK #-} !(SmallArray Element)
   , message :: {-# UNPACK #-} !Bytes
   } deriving (Show)
@@ -77,8 +81,15 @@ parser = do
       w <- Latin.decWord32 ()
       pure (Word32.just w)
   Latin.char () ' '
-  messageType <- takeKeywordAndSpace ()
-  structuredData <- takeStructuredData
+  messageType <- Latin.trySatisfy (=='-') >>= \case
+    True -> do
+      Latin.char () ' ' 
+      array <- Unsafe.expose 
+      pure Bytes{array,offset=0,length=0}
+    False -> takeKeywordAndSpace ()
+  structuredData <- Latin.trySatisfy (=='-') >>= \case
+    True -> pure mempty
+    False -> takeStructuredData
   Latin.char () ' '
   message <- Parser.remaining
   pure Message

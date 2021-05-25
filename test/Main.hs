@@ -76,6 +76,16 @@ main = do
       let Ietf.Element{id,parameters} = PM.indexSmallArray structuredData 0
       assert "structured_data.id" (id == Bytes.fromLatinString "junos@2636.1.1.1.2.133")
       assert "structured_data.parameters_length" (length parameters == 32)
+  putStrLn "Test IETF C"
+  case Ietf.decode ietfC of
+    Nothing -> fail "Could not decode IETF message C"
+    Just Ietf.Message{version,hostname,application,messageType,structuredData,message} -> do
+      assert "version" (version == 1)
+      assert "hostname" (hostname == Bytes.fromLatinString "mymachine.example.com")
+      assert "application" (application == Bytes.fromLatinString "bigapp")
+      assert "message_type" (Bytes.null messageType)
+      assert "structured_data_length" (length structuredData == 0)
+      assert "message" (message == Bytes.fromLatinString "hey world")
   putStrLn "Finished"
 
 assert :: String -> Bool -> IO ()
@@ -112,4 +122,10 @@ ietfB = Bytes.fromLatinString $ concat
   , "application=\"UNKNOWN\" nested-application=\"UNKNOWN\" username=\"N/A\" "
   , "roles=\"N/A\" packet-incoming-interface=\"ge-0/0/5.0\" encrypted=\"UNKNOWN\"] "
   , "session closed application failure or action"
+  ]
+
+ietfC :: Bytes
+ietfC = Bytes.fromLatinString $ concat
+  [ "<165>1 2003-10-11T22:14:15.003Z mymachine.example.com bigapp - - - "
+  , "hey world"
   ]
