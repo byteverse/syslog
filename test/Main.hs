@@ -89,7 +89,14 @@ main = do
   putStrLn "Test IETF D"
   case Ietf.decode ietfD of
     Nothing -> fail "Could not decode IETF message D"
-    Just Ietf.Message{message} -> do
+    Just Ietf.Message{message,structuredData} -> do
+      assert "structured_data_length" (length structuredData == 3)
+      let Ietf.Element{parameters} = PM.indexSmallArray structuredData 2
+      assert "parameters_length" (length parameters == 1)
+      let Ietf.Parameter{value} = PM.indexSmallArray parameters 0
+      case value == Bytes.fromLatinString "\\foo\\bar.txt" of
+        True -> pure ()
+        False -> fail ("structured_data.2.0: " ++ show value)
       assert "message" (message == Bytes.fromLatinString "bad news")
   putStrLn "Finished"
 
@@ -141,5 +148,6 @@ ietfD = Bytes.fromLatinString $ concat
   , "ab1fc131b2f29bc49b09286bb05e0b94e5c36610 1291980691205274618 "
   , "[fileName@53163 fileName=\"badcat.exe\"]"
   , "[deviceAddress@53163 deviceAddress=\"192.0.2.21\"]"
+  , "[path@53163 path=\"\\\\foo\\\\bar.txt\"]"
   , " bad news"
   ]
