@@ -76,11 +76,23 @@ parser = do
   hostname <- takeKeywordAndSpace ()
   application <- takeKeywordAndSpace ()
   processId <- Latin.trySatisfy (=='-') >>= \case
-    True -> pure Word32.nothing
-    False -> do
-      w <- Latin.decWord32 ()
-      pure (Word32.just w)
-  Latin.char () ' '
+    True -> do
+      Latin.char () ' '
+      pure Word32.nothing
+    False -> Parser.orElse
+      -- This is a hack to smooth over a mistake. The process id
+      -- can actually be things other than a decimal-encoded number.
+      -- Sometimes it is 128-bit or 256-bit hexadecimal number. In
+      -- these cases, we just ignore it.
+      ( do w <- Latin.decWord32 ()
+           Latin.char () ' '
+           pure (Word32.just w)
+      )
+      ( do Latin.skipWhile
+             (\c -> (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || (c >= '0' && c <= '9'))
+           Latin.char () ' '
+           pure Word32.nothing
+      )
   messageType <- Latin.trySatisfy (=='-') >>= \case
     True -> do
       Latin.char () ' ' 

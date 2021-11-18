@@ -86,6 +86,11 @@ main = do
       assert "message_type" (Bytes.null messageType)
       assert "structured_data_length" (length structuredData == 0)
       assert "message" (message == Bytes.fromLatinString "hey world")
+  putStrLn "Test IETF D"
+  case Ietf.decode ietfD of
+    Nothing -> fail "Could not decode IETF message D"
+    Just Ietf.Message{message} -> do
+      assert "message" (message == Bytes.fromLatinString "bad news")
   putStrLn "Finished"
 
 assert :: String -> Bool -> IO ()
@@ -128,4 +133,13 @@ ietfC :: Bytes
 ietfC = Bytes.fromLatinString $ concat
   [ "<165>1 2003-10-11T22:14:15.003Z mymachine.example.com bigapp - - - "
   , "hey world"
+  ]
+
+ietfD :: Bytes
+ietfD = Bytes.fromLatinString $ concat
+  [ "<38>1 2021-11-18T11:55:55.661764Z 192.0.2.20 SentinelOne "
+  , "ab1fc131b2f29bc49b09286bb05e0b94e5c36610 1291980691205274618 "
+  , "[fileName@53163 fileName=\"badcat.exe\"]"
+  , "[deviceAddress@53163 deviceAddress=\"192.0.2.21\"]"
+  , " bad news"
   ]
