@@ -54,6 +54,7 @@ import qualified Data.Maybe.Unpacked.Numeric.Word32 as Word32
 import qualified Data.Bytes.Parser as Parser
 import qualified Data.Bytes.Parser.Latin as Latin
 import qualified Data.Bytes.Parser.Unsafe as Unsafe
+import qualified Data.Bytes.Text.Latin1 as Latin1
 
 data Message = Message
   { priority :: !Word32
@@ -188,17 +189,17 @@ takeProcess e = do
   let name0 = Bytes arr processStart ((processEndSucc - 1) - processStart)
       !(# name, priority #) = case Bytes.split1 0x20 name0 of
         Just (pre,post)
-          | Bytes.equalsLatin3 'e' 'r' 'r' pre -> (# post, pre #)
-          | Bytes.equalsLatin4 'c' 'r' 'i' 't' pre -> (# post, pre #)
-          | Bytes.equalsLatin4 'i' 'n' 'f' 'o' pre -> (# post, pre #)
-          | Bytes.equalsLatin4 'w' 'a' 'r' 'n' pre -> (# post, pre #)
-          | Bytes.equalsLatin5 'a' 'l' 'e' 'r' 't' pre -> (# post, pre #)
-          | Bytes.equalsLatin5 'd' 'e' 'b' 'u' 'g' pre -> (# post, pre #)
-          | Bytes.equalsLatin5 'e' 'm' 'e' 'r' 'g' pre -> (# post, pre #)
-          | Bytes.equalsLatin5 'e' 'r' 'r' 'o' 'r' pre -> (# post, pre #)
-          | Bytes.equalsLatin5 'p' 'a' 'n' 'i' 'c' pre -> (# post, pre #)
-          | Bytes.equalsLatin6 'n' 'o' 't' 'i' 'c' 'e' pre -> (# post, pre #)
-          | Bytes.equalsLatin7 'w' 'a' 'r' 'n' 'i' 'n' 'g' pre -> (# post, pre #)
+          | Latin1.equals3 'e' 'r' 'r' pre -> (# post, pre #)
+          | Latin1.equals4 'c' 'r' 'i' 't' pre -> (# post, pre #)
+          | Latin1.equals4 'i' 'n' 'f' 'o' pre -> (# post, pre #)
+          | Latin1.equals4 'w' 'a' 'r' 'n' pre -> (# post, pre #)
+          | Latin1.equals5 'a' 'l' 'e' 'r' 't' pre -> (# post, pre #)
+          | Latin1.equals5 'd' 'e' 'b' 'u' 'g' pre -> (# post, pre #)
+          | Latin1.equals5 'e' 'm' 'e' 'r' 'g' pre -> (# post, pre #)
+          | Latin1.equals5 'e' 'r' 'r' 'o' 'r' pre -> (# post, pre #)
+          | Latin1.equals5 'p' 'a' 'n' 'i' 'c' pre -> (# post, pre #)
+          | Latin1.equals6 'n' 'o' 't' 'i' 'c' 'e' pre -> (# post, pre #)
+          | Latin1.equals7 'w' 'a' 'r' 'n' 'i' 'n' 'g' pre -> (# post, pre #)
         _ -> (# name0, Bytes arr 0 0 #)
   case hasPid of
     False -> pure Process{priority,name,id=Word32.nothing}
@@ -210,16 +211,16 @@ takeProcess e = do
 -- Precondition: length of bytes is 3
 resolveMonth :: Bytes -> Chronos.Month
 resolveMonth b
-  | Bytes.equalsLatin3 'A' 'p' 'r' b = Chronos.april
-  | Bytes.equalsLatin3 'A' 'u' 'g' b = Chronos.august
-  | Bytes.equalsLatin3 'D' 'e' 'c' b = Chronos.december
-  | Bytes.equalsLatin3 'F' 'e' 'b' b = Chronos.february
-  | Bytes.equalsLatin3 'J' 'a' 'n' b = Chronos.january
-  | Bytes.equalsLatin3 'J' 'u' 'l' b = Chronos.july
-  | Bytes.equalsLatin3 'J' 'u' 'n' b = Chronos.june
-  | Bytes.equalsLatin3 'M' 'a' 'r' b = Chronos.march
-  | Bytes.equalsLatin3 'M' 'a' 'y' b = Chronos.may
-  | Bytes.equalsLatin3 'N' 'o' 'v' b = Chronos.november
-  | Bytes.equalsLatin3 'O' 'c' 't' b = Chronos.october
-  | Bytes.equalsLatin3 'S' 'e' 'p' b = Chronos.september
+  | Latin1.equals3 'A' 'p' 'r' b = Chronos.april
+  | Latin1.equals3 'A' 'u' 'g' b = Chronos.august
+  | Latin1.equals3 'D' 'e' 'c' b = Chronos.december
+  | Latin1.equals3 'F' 'e' 'b' b = Chronos.february
+  | Latin1.equals3 'J' 'a' 'n' b = Chronos.january
+  | Latin1.equals3 'J' 'u' 'l' b = Chronos.july
+  | Latin1.equals3 'J' 'u' 'n' b = Chronos.june
+  | Latin1.equals3 'M' 'a' 'r' b = Chronos.march
+  | Latin1.equals3 'M' 'a' 'y' b = Chronos.may
+  | Latin1.equals3 'N' 'o' 'v' b = Chronos.november
+  | Latin1.equals3 'O' 'c' 't' b = Chronos.october
+  | Latin1.equals3 'S' 'e' 'p' b = Chronos.september
   | otherwise = Chronos.Month 12

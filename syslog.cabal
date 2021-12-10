@@ -23,7 +23,7 @@ library
     , base >=4.12 && <5
     , unpacked-maybe-numeric>=0.1.1
     , chronos >=1.1
-    , byteslice >=0.2.2
+    , byteslice >=0.2.6
     , bytesmith >=0.3.6
     , contiguous >=0.5.1
     , primitive >=0.7.1

@@ -8,6 +8,7 @@ import Data.Maybe (isNothing)
 import Syslog.Bsd (Message(Message),Process(Process))
 
 import qualified Data.Bytes as Bytes
+import qualified Data.Bytes.Text.Latin1 as Latin1
 import qualified Data.Primitive as PM
 import qualified Syslog.Bsd as Bsd
 import qualified Syslog.Ietf as Ietf
@@ -20,27 +21,27 @@ main = do
     Nothing -> fail "Could not decode message A"
     Just Message{priority,hostname,process=Just Process{name},message} -> do
       assert "priority" (priority == 133)
-      assert "hostname" (hostname == Bytes.fromLatinString "webserver")
-      assert "process_name" (name == Bytes.fromLatinString "syslogd")
-      assert "message" (message == Bytes.fromLatinString "restart")
+      assert "hostname" (hostname == Latin1.fromString "webserver")
+      assert "process_name" (name == Latin1.fromString "syslogd")
+      assert "message" (message == Latin1.fromString "restart")
     Just _ -> fail "Message A missing process name"
   putStrLn "Test B"
   case Bsd.decode msgB of
     Nothing -> fail "Could not decode message B"
     Just Message{priority,hostname,process=Just Process{name},message} -> do
       assert "priority" (priority == 0)
-      assert "hostname" (hostname == Bytes.fromLatinString "foo.example.org")
-      assert "process_name" (name == Bytes.fromLatinString "sched")
-      assert "message" (message == Bytes.fromLatinString "That's all")
+      assert "hostname" (hostname == Latin1.fromString "foo.example.org")
+      assert "process_name" (name == Latin1.fromString "sched")
+      assert "message" (message == Latin1.fromString "That's all")
     Just _ -> fail "Message B missing process name"
   putStrLn "Test C"
   case Bsd.decode msgC of
     Nothing -> fail "Could not decode message C"
     Just Message{priority,hostname,process=Just Process{name},message} -> do
       assert "priority" (priority == 133)
-      assert "hostname" (hostname == Bytes.fromLatinString "192.0.2.231")
-      assert "process_name" (name == Bytes.fromLatinString "stm")
-      assert "message" (message == Bytes.fromLatinString "Hello")
+      assert "hostname" (hostname == Latin1.fromString "192.0.2.231")
+      assert "process_name" (name == Latin1.fromString "stm")
+      assert "message" (message == Latin1.fromString "Hello")
     Just _ -> fail "Message C missing process name"
   putStrLn "Test D"
   case Bsd.decode msgD of
@@ -48,44 +49,44 @@ main = do
     Just Message{priority,process,message} -> do
       assert "priority" (priority == 26)
       assert "process_name" (isNothing process)
-      assert "message" (message == Bytes.fromLatinString "ASA log")
+      assert "message" (message == Latin1.fromString "ASA log")
   putStrLn "Test E"
   case Bsd.decode msgE of
     Nothing -> fail "Could not decode message E"
     Just Message{process} -> case process of
       Just Process{priority,name} -> do
-        assert "process_priority" (priority == Bytes.fromLatinString "notice")
-        assert "process_name" (name == Bytes.fromLatinString "tmsh")
+        assert "process_priority" (priority == Latin1.fromString "notice")
+        assert "process_name" (name == Latin1.fromString "tmsh")
       Nothing -> fail "Message E missing process information"
   putStrLn "Test IETF A"
   case Ietf.decode ietfA of
     Nothing -> fail "Could not decode IETF message A"
     Just Ietf.Message{version,hostname,structuredData} -> do
       assert "version" (version == 1)
-      assert "hostname" (hostname == Bytes.fromLatinString "mymachine.example.com")
+      assert "hostname" (hostname == Latin1.fromString "mymachine.example.com")
       assert "structured_data_length" (length structuredData == 1)
   putStrLn "Test IETF B"
   case Ietf.decode ietfB of
     Nothing -> fail "Could not decode IETF message B"
     Just Ietf.Message{version,hostname,application,messageType,structuredData} -> do
       assert "version" (version == 1)
-      assert "hostname" (hostname == Bytes.fromLatinString "FOOBAR-SRX-FWL0")
-      assert "application" (application == Bytes.fromLatinString "RT_FLOW")
-      assert "message_type" (messageType == Bytes.fromLatinString "RT_FLOW_SESSION_CLOSE")
+      assert "hostname" (hostname == Latin1.fromString "FOOBAR-SRX-FWL0")
+      assert "application" (application == Latin1.fromString "RT_FLOW")
+      assert "message_type" (messageType == Latin1.fromString "RT_FLOW_SESSION_CLOSE")
       assert "structured_data_length" (length structuredData == 1)
       let Ietf.Element{id,parameters} = PM.indexSmallArray structuredData 0
-      assert "structured_data.id" (id == Bytes.fromLatinString "junos@2636.1.1.1.2.133")
+      assert "structured_data.id" (id == Latin1.fromString "junos@2636.1.1.1.2.133")
       assert "structured_data.parameters_length" (length parameters == 32)
   putStrLn "Test IETF C"
   case Ietf.decode ietfC of
     Nothing -> fail "Could not decode IETF message C"
     Just Ietf.Message{version,hostname,application,messageType,structuredData,message} -> do
       assert "version" (version == 1)
-      assert "hostname" (hostname == Bytes.fromLatinString "mymachine.example.com")
-      assert "application" (application == Bytes.fromLatinString "bigapp")
+      assert "hostname" (hostname == Latin1.fromString "mymachine.example.com")
+      assert "application" (application == Latin1.fromString "bigapp")
       assert "message_type" (Bytes.null messageType)
       assert "structured_data_length" (length structuredData == 0)
-      assert "message" (message == Bytes.fromLatinString "hey world")
+      assert "message" (message == Latin1.fromString "hey world")
   putStrLn "Test IETF D"
   case Ietf.decode ietfD of
     Nothing -> fail "Could not decode IETF message D"
@@ -94,31 +95,35 @@ main = do
       let Ietf.Element{parameters} = PM.indexSmallArray structuredData 2
       assert "parameters_length" (length parameters == 1)
       let Ietf.Parameter{value} = PM.indexSmallArray parameters 0
-      case value == Bytes.fromLatinString "\\foo\\bar.txt" of
+      case value == Latin1.fromString "\\foo\\bar.txt" of
         True -> pure ()
         False -> fail ("structured_data.2.0: " ++ show value)
-      assert "message" (message == Bytes.fromLatinString "bad news")
+      assert "message" (message == Latin1.fromString "bad news")
+  putStrLn "Test IETF E"
+  case Ietf.decode ietfE of
+    Nothing -> fail "Could not decode IETF message E"
+    Just _ -> pure ()
   putStrLn "Finished"
 
 assert :: String -> Bool -> IO ()
 assert ctx b = if b then pure () else fail ctx
 
 msgA, msgB, msgC, msgD, msgE :: Bytes
-msgA = Bytes.fromLatinString "<133>Feb 25 14:09:07 webserver syslogd: restart"
-msgB = Bytes.fromLatinString "<0>Oct 22 10:52:01 foo.example.org sched[0]: That's all"
-msgC = Bytes.fromLatinString "<133>May  2 11:43:37 2020 192.0.2.231 stm[8753]:  Hello"
-msgD = Bytes.fromLatinString "<26>May 05 2020 07:30:21 192.0.2.10 : ASA log"
-msgE = Bytes.fromLatinString "<133>Aug 10 07:12:13 example.local notice tmsh[4067]: hey"
+msgA = Latin1.fromString "<133>Feb 25 14:09:07 webserver syslogd: restart"
+msgB = Latin1.fromString "<0>Oct 22 10:52:01 foo.example.org sched[0]: That's all"
+msgC = Latin1.fromString "<133>May  2 11:43:37 2020 192.0.2.231 stm[8753]:  Hello"
+msgD = Latin1.fromString "<26>May 05 2020 07:30:21 192.0.2.10 : ASA log"
+msgE = Latin1.fromString "<133>Aug 10 07:12:13 example.local notice tmsh[4067]: hey"
 
 ietfA :: Bytes
-ietfA = Bytes.fromLatinString $ concat
+ietfA = Latin1.fromString $ concat
   [ "<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 "
   , "[exampleSDID@32473 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"] "
   , "BOMAn application event log entry"
   ]
 
 ietfB :: Bytes
-ietfB = Bytes.fromLatinString $ concat
+ietfB = Latin1.fromString $ concat
   [ "<14>1 2020-10-15T17:01:23.466Z FOOBAR-SRX-FWL0 RT_FLOW - RT_FLOW_SESSION_CLOSE "
   , "[junos@2636.1.1.1.2.133 reason=\"application failure or action\" "
   , "source-address=\"192.0.2.29\" source-port=\"55110\" "
@@ -137,17 +142,23 @@ ietfB = Bytes.fromLatinString $ concat
   ]
 
 ietfC :: Bytes
-ietfC = Bytes.fromLatinString $ concat
+ietfC = Latin1.fromString $ concat
   [ "<165>1 2003-10-11T22:14:15.003Z mymachine.example.com bigapp - - - "
   , "hey world"
   ]
 
 ietfD :: Bytes
-ietfD = Bytes.fromLatinString $ concat
+ietfD = Latin1.fromString $ concat
   [ "<38>1 2021-11-18T11:55:55.661764Z 192.0.2.20 SentinelOne "
   , "ab1fc131b2f29bc49b09286bb05e0b94e5c36610 1291980691205274618 "
   , "[fileName@53163 fileName=\"badcat.exe\"]"
   , "[deviceAddress@53163 deviceAddress=\"192.0.2.21\"]"
   , "[path@53163 path=\"\\\\foo\\\\bar.txt\"]"
   , " bad news"
+  ]
+
+ietfE :: Bytes
+ietfE = Latin1.fromString $ concat
+  [ "<14>1 2021-12-10T09:19:19.614-05:00 THE-HOST RT_FLOW - RT_FLOW_SESSION_DENY "
+  , "[junos@2636.1.1.1.2.40 source-address=\"192.0.2.13\"]"
   ]

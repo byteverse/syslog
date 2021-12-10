@@ -105,8 +105,13 @@ parser = do
   structuredData <- Latin.trySatisfy (=='-') >>= \case
     True -> pure mempty
     False -> takeStructuredData
-  Latin.char () ' '
-  message <- Parser.remaining
+  message <- Parser.isEndOfInput >>= \case
+    True -> do
+      arr <- Unsafe.expose
+      pure Bytes{array=arr,offset=0,length=0}
+    False -> do
+      Latin.char () ' '
+      Parser.remaining
   pure Message
     {priority,version,timestamp,hostname,application
     ,processId,messageType,structuredData,message
