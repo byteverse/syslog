@@ -12,7 +12,7 @@
 --
 -- This library assumes that the @TAG@ field described by section 5.3 of
 -- RFC 3164 is a process name. It also assumes that the optional bracketed
--- number that follows it is a process id. This library also addresses two
+-- number that follows it is a process id. This library also addresses three
 -- common extensions to RFC 3164:
 --
 -- * Some vendors include a year after the timestamp. For example:
@@ -26,6 +26,9 @@
 --   keywords (followed by a space), the keyword and the trailing space
 --   are removed from the process name, and the keyword is made available
 --   in the @priority@ field.
+-- * Cisco ASAs omit the hostname sometimes. This is totally bizarre and leads
+--   to messages that looks like: @<190>Jun 08 2022 14:46:28: message@. In
+--   this case, the hostname is set to the empty string.
 module Syslog.Bsd
   ( -- * Types
     Message(..)
@@ -97,15 +100,21 @@ parser :: Parser () s Message
 parser = do
   priority <- takePriority ()
   timestamp <- takeTimestamp ()
-  hostname <- takeHostname ()
-  process <- Latin.trySatisfy (==':') >>= \case
-    True -> pure Nothing
+  Latin.trySatisfy (==':') >>= \case
+    True -> do
+      Latin.skipChar ' '
+      message <- Parser.remaining
+      pure Message{priority,timestamp,hostname=Bytes.empty,process=Nothing,message}
     False -> do
-      p <- takeProcess ()
-      pure (Just p)
-  Latin.skipChar ' '
-  message <- Parser.remaining
-  pure Message{priority,timestamp,hostname,process,message}
+      hostname <- takeHostname ()
+      process <- Latin.trySatisfy (==':') >>= \case
+        True -> pure Nothing
+        False -> do
+          p <- takeProcess ()
+          pure (Just p)
+      Latin.skipChar ' '
+      message <- Parser.remaining
+      pure Message{priority,timestamp,hostname,process,message}
 
 -- | Consume the angle-bracketed priority. RFC 3164 does not allow
 -- a space to follow the priority, so this does not consume a
@@ -124,10 +133,10 @@ takeHostname e =
   -- TODO: This should actually use a takeWhile1.
   Latin.takeTrailedBy e ' '
 
--- | Consume the timestamp and the space that follows it. Returns
--- the parsed timestamp. This allows two extensions to the RFC 3164
--- datetime format. The year may be present either right after the
--- day of the month or after the time of day.
+-- | Consume the timestamp and the trailing space character if a trailing
+-- space exists. Returns the parsed timestamp. This allows two extensions
+-- to the RFC 3164 datetime format. The year may be present either right
+-- after the day of the month or after the time of day.
 takeTimestamp :: e -> Parser e s Timestamp
 takeTimestamp e = do
   monthBytes <- Parser.take e 3
@@ -156,7 +165,7 @@ takeTimestamp e = do
       Latin.char e ':'
       second <- Latin.decWord8 e
       when (second > 59) (Parser.fail e)
-      Latin.char e ' '
+      _ <- Latin.trySatisfy (== ' ')
       pure Timestamp{month,day,hour,minute,second,year=Word32.just hourOrYear}
     ':' -> do
       when (hourOrYear > 23) (Parser.fail e)
@@ -166,16 +175,18 @@ takeTimestamp e = do
       Latin.char e ':'
       second <- Latin.decWord8 e
       when (second > 59) (Parser.fail e)
-      Latin.char e ' '
-      -- The only good way to allow a year is with backtracking. We do not
-      -- learn until we encounter the space following the decimal number
-      -- whether it was a year or part of a hostname (likely an ip address).
-      Parser.orElse
-        ( do y <- Latin.decWord32 e
-             Latin.char e ' '
-             pure Timestamp{month,day,hour,minute,second,year=Word32.just y}
-        )
-        (pure Timestamp{month,day,hour,minute,second,year=Word32.nothing})
+      Latin.trySatisfy (== ' ') >>= \case
+        False -> pure Timestamp{month,day,hour,minute,second,year=Word32.nothing}
+        True -> do
+          -- The only good way to allow a year is with backtracking. We do not
+          -- learn until we encounter the space following the decimal number
+          -- whether it was a year or part of a hostname (likely an ip address).
+          Parser.orElse
+            ( do y <- Latin.decWord32 e
+                 Latin.char e ' '
+                 pure Timestamp{month,day,hour,minute,second,year=Word32.just y}
+            )
+            (pure Timestamp{month,day,hour,minute,second,year=Word32.nothing})
     _ -> Parser.fail e
 
 -- | Take the process name and the process id and consume the colon
