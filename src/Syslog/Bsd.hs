@@ -110,6 +110,11 @@ parser = do
       process <- Latin.trySatisfy (==':') >>= \case
         True -> pure Nothing
         False -> do
+          -- If the process name starts with an open parenthesis, this is
+          -- not BSD-style syslog, and we give up.
+          Latin.peek' () >>= \case
+            '(' -> Parser.fail ()
+            _ -> pure ()
           p <- takeProcess ()
           pure (Just p)
       Latin.skipChar ' '
