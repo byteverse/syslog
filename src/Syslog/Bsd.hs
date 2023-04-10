@@ -107,27 +107,31 @@ parser = do
       pure Message{priority,timestamp,hostname=Bytes.empty,process=Nothing,message}
     False -> do
       hostname <- takeHostname ()
-      -- Watchguard includes an ISO8601-encoded datetime in parenthesis
-      -- before the process name. If we detect this, we skip over it.
+      -- Watchguard includes a serial number and an ISO8601-encoded datetime
+      -- in parenthesis before the process name. If we detect this, we skip over it.
       -- Note that, in compliant BSD-style syslog, there is no way for
       -- an open parenthesis to appear in this position. So, by doing
       -- this, we do not reject any good logs.
-      Latin.trySatisfy (=='(') >>= \case
-        True -> do
-          Latin.skipDigits1 ()
-          Latin.char () '-'
-          Latin.skipDigits1 ()
-          Latin.char () '-'
-          Latin.skipDigits1 ()
-          Latin.char () 'T'
-          Latin.skipDigits1 ()
-          Latin.char () ':'
-          Latin.skipDigits1 ()
-          Latin.char () ':'
-          Latin.skipDigits1 ()
-          Latin.char () ')'
-          Latin.char () ' '
-        False -> pure ()
+      Latin.peek' () >>= \case
+        c | c >= 'A' && c <= 'Z' -> Parser.orElse
+              ( do Latin.skipWhile (\x -> (x >= 'A' && x <= 'Z') || (x >= '0' && x <= '9'))
+                   Latin.char () ' '
+                   Latin.char () '('
+                   Latin.skipDigits1 ()
+                   Latin.char () '-'
+                   Latin.skipDigits1 ()
+                   Latin.char () '-'
+                   Latin.skipDigits1 ()
+                   Latin.char () 'T'
+                   Latin.skipDigits1 ()
+                   Latin.char () ':'
+                   Latin.skipDigits1 ()
+                   Latin.char () ':'
+                   Latin.skipDigits1 ()
+                   Latin.char () ')'
+                   Latin.char () ' '
+              ) (pure ())
+        _ -> pure ()
       process <- Latin.trySatisfy (==':') >>= \case
         True -> pure Nothing
         False -> do
