@@ -107,14 +107,30 @@ parser = do
       pure Message{priority,timestamp,hostname=Bytes.empty,process=Nothing,message}
     False -> do
       hostname <- takeHostname ()
+      -- Watchguard includes an ISO8601-encoded datetime in parenthesis
+      -- before the process name. If we detect this, we skip over it.
+      -- Note that, in compliant BSD-style syslog, there is no way for
+      -- an open parenthesis to appear in this position. So, by doing
+      -- this, we do not reject any good logs.
+      Latin.trySatisfy (=='(') >>= \case
+        True -> do
+          Latin.skipDigits1 ()
+          Latin.char () '-'
+          Latin.skipDigits1 ()
+          Latin.char () '-'
+          Latin.skipDigits1 ()
+          Latin.char () 'T'
+          Latin.skipDigits1 ()
+          Latin.char () ':'
+          Latin.skipDigits1 ()
+          Latin.char () ':'
+          Latin.skipDigits1 ()
+          Latin.char () ')'
+          Latin.char () ' '
+        False -> pure ()
       process <- Latin.trySatisfy (==':') >>= \case
         True -> pure Nothing
         False -> do
-          -- If the process name starts with an open parenthesis, this is
-          -- not BSD-style syslog, and we give up.
-          Latin.peek' () >>= \case
-            '(' -> Parser.fail ()
-            _ -> pure ()
           p <- takeProcess ()
           pure (Just p)
       Latin.skipChar ' '
