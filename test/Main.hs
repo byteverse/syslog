@@ -108,6 +108,10 @@ main = do
   case Ietf.decode ietfE of
     Nothing -> fail "Could not decode IETF message E"
     Just _ -> pure ()
+  putStrLn "Test IETF F"
+  case Ietf.decode ietfF of
+    Nothing -> fail "Could not decode IETF message F"
+    Just _ -> pure ()
   putStrLn "Finished"
 
 assert :: String -> Bool -> IO ()
@@ -168,3 +172,6 @@ ietfE = Latin1.fromString $ concat
   [ "<14>1 2021-12-10T09:19:19.614-05:00 THE-HOST RT_FLOW - RT_FLOW_SESSION_DENY "
   , "[junos@2636.1.1.1.2.40 source-address=\"192.0.2.13\"]"
   ]
+
+ietfF :: Bytes
+ietfF = Latin1.fromString "<14>1 2023-05-09T16:21:33-04:00 192.0.2.5 - - - -  CEF:0"
