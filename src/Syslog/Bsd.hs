@@ -216,6 +216,11 @@ takeTimestamp e = do
       Latin.char e ':'
       second <- Latin.decWord8 e
       when (second > 59) (Parser.fail e)
+      Latin.trySatisfy (== '.') >>= \case
+        True -> do
+          -- Subsecond part. Nonstandard, and we ignore it.
+          Latin.skipDigits1 e
+        False -> pure ()
       Latin.trySatisfy (== ' ') >>= \case
         False -> pure Timestamp {month, day, hour, minute, second, year = Word32.nothing}
         True -> do
