@@ -119,6 +119,7 @@ parser = do
           -- HAProxy logs are sometimes missing the hostname
           Unsafe.jump preHostname
           process <- takeProcess ()
+          Latin.skipChar ' '
           message <- Parser.remaining
           pure Message {priority, timestamp, hostname=Bytes.empty, process=Just process, message}
         ' ' -> do
