@@ -6,6 +6,7 @@ import Prelude hiding (id)
 import Data.Bytes (Bytes)
 import Data.Maybe (isNothing)
 import Syslog.Bsd (Message (Message), Process (Process))
+import Control.Monad (when)
 
 import qualified Data.Bytes as Bytes
 import qualified Data.Bytes.Text.Latin1 as Latin1
@@ -67,6 +68,12 @@ main = do
   case Bsd.decode msgG of
     Nothing -> fail "Could not decode message G"
     Just {} -> pure ()
+  case Bsd.decode msgH of
+    Nothing -> fail "Could not decode message H"
+    Just Message {process} -> case process of
+      Just Process {name} -> do
+        when (name /= Latin1.fromString "haproxy") (fail ("Expected process_name haproxy but got " ++ Latin1.toString name))
+      Nothing -> fail "Message H missing process information"
   putStrLn "Test IETF A"
   case Ietf.decode ietfA of
     Nothing -> fail "Could not decode IETF message A"
@@ -121,7 +128,7 @@ main = do
 assert :: String -> Bool -> IO ()
 assert ctx b = if b then pure () else fail ctx
 
-msgA, msgB, msgC, msgD, msgE, msgF, msgG :: Bytes
+msgA, msgB, msgC, msgD, msgE, msgF, msgG, msgH :: Bytes
 msgA = Latin1.fromString "<133>Feb 25 14:09:07 webserver syslogd: restart"
 msgB = Latin1.fromString "<0>Oct 22 10:52:01 foo.example.org sched[0]: That's all"
 msgC = Latin1.fromString "<133>May  2 11:43:37 2020 192.0.2.231 stm[8753]:  Hello"
@@ -129,6 +136,9 @@ msgD = Latin1.fromString "<26>May 05 2020 07:30:21 192.0.2.10 : ASA log"
 msgE = Latin1.fromString "<133>Aug 10 07:12:13 example.local notice tmsh[4067]: hey"
 msgF = Latin1.fromString "<133>Aug 10 07:12:13: foo"
 msgG = Latin1.fromString "<134>Oct 30 12:31:49 10.22.16.11 logrhythm: <Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'>"
+
+-- HAProxy logs are missing the hostname
+msgH = Latin1.fromString "<134>Jun 15 14:06:07 haproxy[1642]: 192.0.2.253:54646 [15/Jun/2026:14:06:07.821] hello there"
 
 ietfA :: Bytes
 ietfA =

@@ -43,7 +43,6 @@ module Syslog.Bsd
     -- * Parsing Fragments
   , takePriority
   , takeTimestamp
-  , takeHostname
   , takeProcess
   ) where
 
@@ -113,45 +112,55 @@ parser = do
       message <- Parser.remaining
       pure Message {priority, timestamp, hostname = Bytes.empty, process = Nothing, message}
     False -> do
-      hostname <- takeHostname ()
-      -- Watchguard includes a serial number and an ISO8601-encoded datetime
-      -- in parenthesis before the process name. If we detect this, we skip over it.
-      -- Note that, in compliant BSD-style syslog, there is no way for
-      -- an open parenthesis to appear in this position. So, by doing
-      -- this, we do not reject any good logs.
-      Latin.peek' () >>= \case
-        c
-          | c >= 'A' && c <= 'Z' ->
-              Parser.orElse
-                ( do
-                    Latin.skipWhile (\x -> (x >= 'A' && x <= 'Z') || (x >= '0' && x <= '9'))
-                    Latin.char () ' '
-                    Latin.char () '('
-                    Latin.skipDigits1 ()
-                    Latin.char () '-'
-                    Latin.skipDigits1 ()
-                    Latin.char () '-'
-                    Latin.skipDigits1 ()
-                    Latin.char () 'T'
-                    Latin.skipDigits1 ()
-                    Latin.char () ':'
-                    Latin.skipDigits1 ()
-                    Latin.char () ':'
-                    Latin.skipDigits1 ()
-                    Latin.char () ')'
-                    Latin.char () ' '
-                )
-                (pure ())
-        _ -> pure ()
-      process <-
-        Latin.trySatisfy (== ':') >>= \case
-          True -> pure Nothing
-          False -> do
-            p <- takeProcess ()
-            pure (Just p)
-      Latin.skipChar ' '
-      message <- Parser.remaining
-      pure Message {priority, timestamp, hostname, process, message}
+      preHostname <- Unsafe.cursor
+      hostname <- takeHostname
+      Latin.any () >>= \case
+        '[' -> do
+          -- HAProxy logs are sometimes missing the hostname
+          Unsafe.jump preHostname
+          process <- takeProcess ()
+          message <- Parser.remaining
+          pure Message {priority, timestamp, hostname=Bytes.empty, process=Just process, message}
+        ' ' -> do
+          -- Watchguard includes a serial number and an ISO8601-encoded datetime
+          -- in parenthesis before the process name. If we detect this, we skip over it.
+          -- Note that, in compliant BSD-style syslog, there is no way for
+          -- an open parenthesis to appear in this position. So, by doing
+          -- this, we do not reject any good logs.
+          Latin.peek' () >>= \case
+            c
+              | c >= 'A' && c <= 'Z' ->
+                  Parser.orElse
+                    ( do
+                        Latin.skipWhile (\x -> (x >= 'A' && x <= 'Z') || (x >= '0' && x <= '9'))
+                        Latin.char () ' '
+                        Latin.char () '('
+                        Latin.skipDigits1 ()
+                        Latin.char () '-'
+                        Latin.skipDigits1 ()
+                        Latin.char () '-'
+                        Latin.skipDigits1 ()
+                        Latin.char () 'T'
+                        Latin.skipDigits1 ()
+                        Latin.char () ':'
+                        Latin.skipDigits1 ()
+                        Latin.char () ':'
+                        Latin.skipDigits1 ()
+                        Latin.char () ')'
+                        Latin.char () ' '
+                    )
+                    (pure ())
+            _ -> pure ()
+          process <-
+            Latin.trySatisfy (== ':') >>= \case
+              True -> pure Nothing
+              False -> do
+                p <- takeProcess ()
+                pure (Just p)
+          Latin.skipChar ' '
+          message <- Parser.remaining
+          pure Message {priority, timestamp, hostname, process, message}
+        _ -> Parser.fail ()
 
 {- | Consume the angle-bracketed priority. RFC 3164 does not allow
 a space to follow the priority, so this does not consume a
@@ -164,13 +173,13 @@ takePriority e = do
   Latin.char e '>'
   pure priority
 
-{- | Consume the hostname and the space that follows it. Returns
+{- | Consume the hostname but not the space that follows it. Returns
 the hostname.
 -}
-takeHostname :: e -> Parser e s Bytes
-takeHostname e =
+takeHostname :: Parser e s Bytes
+takeHostname =
   -- TODO: This should actually use a takeWhile1.
-  Latin.takeTrailedBy e ' '
+  Parser.takeWhile (\w -> w > 0x20 && w < 127 && w /= 0x5B)
 
 {- | Consume the timestamp and the trailing space character if a trailing
 space exists. Returns the parsed timestamp. This allows two extensions
